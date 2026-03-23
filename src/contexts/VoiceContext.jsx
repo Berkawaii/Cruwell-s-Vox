@@ -13,6 +13,9 @@ const servers = {
   iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
 };
 
+// We no longer need fake video tracks because we use perfect negotiation
+
+
 export function VoiceProvider({ children }) {
   const { currentUser } = useAuth();
   const [roomId, setRoomId] = useState(null);
@@ -104,21 +107,24 @@ export function VoiceProvider({ children }) {
     if (!inRoom || !roomRef.current) return;
 
     if (isScreenSharing) {
-      // Stop screen share
+      // Stop screen share -> Remove video track entirely to force renegotiation
       if (screenStreamRef.current) {
         screenStreamRef.current.getTracks().forEach(t => t.stop());
+        
+        Object.values(peerConnections.current).forEach(pc => {
+          if (pc && typeof pc.getSenders === 'function') {
+            const senders = pc.getSenders();
+            // Remove ALL video senders
+            senders.forEach(sender => {
+              if (sender.track && sender.track.kind === 'video') pc.removeTrack(sender);
+            });
+          }
+        });
+        
         screenStreamRef.current = null;
         setScreenStream(null);
       }
       setIsScreenSharing(false);
-      
-      // Replace video track in all peers with null/empty
-      Object.values(peerConnections.current).forEach(pc => {
-        if (pc && typeof pc.getSenders === 'function') {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) sender.replaceTrack(null);
-        }
-      });
 
       await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: false }).catch(() => {});
     } else {
@@ -130,20 +136,13 @@ export function VoiceProvider({ children }) {
 
         const videoTrack = dispStream.getVideoTracks()[0];
         videoTrack.onended = () => {
-          // User stopped via browser UI
           if (isRunningRef.current) toggleScreenShare();
         };
 
-        // Send video track to all existing peers
+        // Add track to peer connections to trigger renegotiation
         Object.values(peerConnections.current).forEach(pc => {
-          if (pc && typeof pc.getSenders === 'function') {
-            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-            if (sender) {
-              sender.replaceTrack(videoTrack);
-            } else {
-              // Add it if there's no video sender yet
-              pc.addTrack(videoTrack, dispStream);
-            }
+          if (pc && typeof pc.addTrack === 'function') {
+            pc.addTrack(videoTrack, dispStream);
           }
         });
 
@@ -226,9 +225,9 @@ export function VoiceProvider({ children }) {
       requestAnimationFrame(processNoiseGate);
       // ──────────────────────────────────────────────────────────────────
 
-      // The stream we expose to React UI (for visualizer/loopback) is the processed one
       const processedStream = destination.stream;
 
+      // Ensure localStream only contains audio initially
       setLocalStream(processedStream);
       setInRoom(true);
 
@@ -256,8 +255,8 @@ export function VoiceProvider({ children }) {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const data = change.doc.data();
-            // Pass the raw mic stream to peer connections; screen share is addTrack'd separately
-            if (data.offer) handleIncomingOffer(change.doc.id, data.offer, stream);
+            // We use callerOffer because initiateCall writes callerOffer
+            if (data.callerOffer || data.offer) handleIncomingOffer(change.doc.id, data.callerOffer || data.offer, stream);
           }
         });
       });
@@ -266,7 +265,7 @@ export function VoiceProvider({ children }) {
       // Call everyone already in the room
       const participantsSnap = await getDocs(collection(roomRef.current, 'participants'));
       participantsSnap.forEach(pDoc => {
-        if (pDoc.id !== currentUser.uid) initiateCall(pDoc.id, stream);
+        if (pDoc.id !== currentUser.uid) initiateCall(pDoc.id, stream); // Start with audio only
       });
 
     } catch (e) {
@@ -280,34 +279,55 @@ export function VoiceProvider({ children }) {
   const initiateCall = async (targetUid, stream) => {
     const pc = new RTCPeerConnection(servers);
     peerConnections.current[targetUid] = pc;
+    const connectionRef = doc(roomRef.current, 'participants', targetUid, 'connections', currentUser.uid);
+
+    pc.ontrack = event => {
+      setRemoteStreams(prev => {
+        const existing = prev[targetUid] ? new MediaStream(prev[targetUid].getTracks()) : new MediaStream();
+        existing.getTracks().filter(t => t.kind === event.track.kind).forEach(t => existing.removeTrack(t));
+        existing.addTrack(event.track);
+        return { ...prev, [targetUid]: existing };
+      });
+    };
+
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await setDoc(connectionRef, { callerOffer: { type: offer.type, sdp: offer.sdp }, timestamp: Date.now() }, { merge: true });
+      } catch (err) {
+        console.error("Negotiation error:", err);
+      }
+    };
 
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    pc.ontrack = event => {
-      setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
-    };
-
-    const targetConnectionRef = doc(roomRef.current, 'participants', targetUid, 'connections', currentUser.uid);
-    const callerCandidatesCollection = collection(targetConnectionRef, 'callerCandidates');
-
     pc.onicecandidate = event => {
-      if (event.candidate) addDoc(callerCandidatesCollection, event.candidate.toJSON());
+      if (event.candidate) addDoc(collection(connectionRef, 'callerCandidates'), event.candidate.toJSON());
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await setDoc(targetConnectionRef, { offer: { type: offer.type, sdp: offer.sdp } });
-
-    const unsubAnswer = onSnapshot(targetConnectionRef, snapshot => {
+    const unsubSignal = onSnapshot(connectionRef, async snapshot => {
       const data = snapshot.data();
-      if (data?.answer && !pc.currentRemoteDescription) {
-        pc.setRemoteDescription(new RTCSessionDescription(data.answer));
-      }
-    });
-    peerConnections.current[`_unsubAnswer_${targetUid}`] = unsubAnswer;
+      if (!data) return;
 
-    const calleeCandidatesCollection = collection(targetConnectionRef, 'calleeCandidates');
-    const unsubIce = onSnapshot(calleeCandidatesCollection, snapshot => {
+      try {
+        // Handle incoming answers to our callerOffers
+        if (data.calleeAnswer && data.calleeAnswer.sdp !== pc.currentRemoteDescription?.sdp) {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.calleeAnswer));
+        }
+        
+        // Handle incoming offers from callee (if they add a screen track)
+        if (data.calleeOffer && data.calleeOffer.sdp !== pc.remoteDescription?.sdp && pc.signalingState === "stable") {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.calleeOffer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await setDoc(connectionRef, { callerAnswer: { type: answer.type, sdp: answer.sdp }, timestamp: Date.now() }, { merge: true });
+        }
+      } catch (e) { console.error("Signal error caller:", e); }
+    });
+    peerConnections.current[`_unsubSignal_${targetUid}`] = unsubSignal;
+
+    const unsubIce = onSnapshot(collection(connectionRef, 'calleeCandidates'), snapshot => {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
       });
@@ -315,30 +335,63 @@ export function VoiceProvider({ children }) {
     peerConnections.current[`_unsubIce_${targetUid}`] = unsubIce;
   };
 
-  const handleIncomingOffer = async (callerUid, offer, stream) => {
+  const handleIncomingOffer = async (callerUid, initialOffer, stream) => {
     const pc = new RTCPeerConnection(servers);
     peerConnections.current[callerUid] = pc;
-
-    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+    const connectionRef = doc(roomRef.current, 'participants', currentUser.uid, 'connections', callerUid);
 
     pc.ontrack = event => {
-      setRemoteStreams(prev => ({ ...prev, [callerUid]: event.streams[0] }));
+      setRemoteStreams(prev => {
+        const existing = prev[callerUid] ? new MediaStream(prev[callerUid].getTracks()) : new MediaStream();
+        existing.getTracks().filter(t => t.kind === event.track.kind).forEach(t => existing.removeTrack(t));
+        existing.addTrack(event.track);
+        return { ...prev, [callerUid]: existing };
+      });
     };
 
-    const myConnectionRef = doc(roomRef.current, 'participants', currentUser.uid, 'connections', callerUid);
-    const calleeCandidatesCollection = collection(myConnectionRef, 'calleeCandidates');
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await setDoc(connectionRef, { calleeOffer: { type: offer.type, sdp: offer.sdp }, timestamp: Date.now() }, { merge: true });
+      } catch (err) { console.error("Negotiation error:", err); }
+    };
+
+    // Handle initial incoming connection
+    await pc.setRemoteDescription(new RTCSessionDescription(initialOffer));
+    
+    stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+    const initialAnswer = await pc.createAnswer();
+    await pc.setLocalDescription(initialAnswer);
+    await setDoc(connectionRef, { calleeAnswer: { type: initialAnswer.type, sdp: initialAnswer.sdp }, timestamp: Date.now() }, { merge: true });
 
     pc.onicecandidate = event => {
-      if (event.candidate) addDoc(calleeCandidatesCollection, event.candidate.toJSON());
+      if (event.candidate) addDoc(collection(connectionRef, 'calleeCandidates'), event.candidate.toJSON());
     };
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offer));
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await updateDoc(myConnectionRef, { answer: { type: answer.type, sdp: answer.sdp } });
+    const unsubSignal = onSnapshot(connectionRef, async snapshot => {
+      const data = snapshot.data();
+      if (!data) return;
 
-    const callerCandidatesCollection = collection(myConnectionRef, 'callerCandidates');
-    const unsubIce = onSnapshot(callerCandidatesCollection, snapshot => {
+      try {
+        // Handle new offers from caller (if they add a track)
+        if (data.callerOffer && data.callerOffer.sdp !== pc.remoteDescription?.sdp && pc.signalingState === "stable") {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.callerOffer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await setDoc(connectionRef, { calleeAnswer: { type: answer.type, sdp: answer.sdp }, timestamp: Date.now() }, { merge: true });
+        }
+
+        // Handle incoming answers to our calleeOffers
+        if (data.callerAnswer && data.callerAnswer.sdp !== pc.currentRemoteDescription?.sdp) {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.callerAnswer));
+        }
+      } catch (e) { console.error("Signal error callee:", e); }
+    });
+    peerConnections.current[`_unsubSignal_${callerUid}`] = unsubSignal;
+
+    const unsubIce = onSnapshot(collection(connectionRef, 'callerCandidates'), snapshot => {
       snapshot.docChanges().forEach(change => {
         if (change.type === 'added') pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
       });
