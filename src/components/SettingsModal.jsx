@@ -174,8 +174,8 @@ export default function SettingsModal({ onClose }) {
                 style={{ width: '100%', marginTop: '8px', accentColor: 'var(--primary)' }}
               />
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                <span>Strict (Silence)</span>
                 <span>Relaxed (Always on)</span>
+                <span>Strict (Silence)</span>
               </div>
             </div>
 

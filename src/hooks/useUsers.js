@@ -1,20 +1,19 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
+import { collection, onSnapshot, query, doc, updateDoc } from 'firebase/firestore';
 
 export function useUsers() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // For now, let's just get everyone. 
-    // In a real app, you'd filter by "lastSeen" or a "status" field.
     const q = query(collection(db, 'users'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersList = snapshot.docs.map(doc => ({
-        uid: doc.id,
-        ...doc.data()
+      const usersList = snapshot.docs.map(d => ({
+        id: d.id,       // Used by AdminModal for role changes
+        uid: d.id,      // Backwards compatible
+        ...d.data()
       }));
       setUsers(usersList);
       setLoading(false);
@@ -26,5 +25,13 @@ export function useUsers() {
     return () => unsubscribe();
   }, []);
 
-  return { users, loading };
+  const updateUserRole = async (userId, newRole) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+    } catch (err) {
+      console.error('Failed to update user role:', err);
+    }
+  };
+
+  return { users, loading, updateUserRole };
 }
