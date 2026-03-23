@@ -160,25 +160,6 @@ export function VoiceProvider({ children }) {
              setScreenStream(null);
              setIsScreenSharing(false);
              const fkTrack = createFakeVideoTrack();
-             const curTrack = localStream.getVideoTracks()[0];
-             if (curTrack) {
-               localStream.removeTrack(curTrack);
-               curTrack.stop();
-             }
-             localStream.addTrack(fkTrack);
-             Object.values(peerConnections.current).forEach(pc => {
-                 if (pc && typeof pc.getSenders === 'function') {
-                   const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                   if (sender) sender.replaceTrack(fkTrack);
-                 }
-             });
-             if (roomRef.current) {
-                await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: false }).catch(()=>{});
-             }
-         };
-
-         const currentVideoTrack = localStream.getVideoTracks()[0];
-         if (currentVideoTrack) {
            localStream.removeTrack(currentVideoTrack);
            currentVideoTrack.stop();
          }
@@ -383,6 +364,12 @@ export function VoiceProvider({ children }) {
     if (localStream) {
       const newMuted = !micMuted;
       localStream.getAudioTracks().forEach(track => { track.enabled = !newMuted; });
+      
+      // Also mute the processing nodes for safety
+      if (audioCtxRef.current && gainNodeRef.current) {
+        gainNodeRef.current.gain.setTargetAtTime(newMuted ? 0 : settingsRef.current.manualGain, audioCtxRef.current.currentTime, 0.05);
+      }
+      
       setMicMuted(newMuted);
       if (roomRef.current && currentUser?.uid) {
          updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isMuted: newMuted }).catch(()=>{});

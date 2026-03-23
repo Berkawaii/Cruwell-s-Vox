@@ -13,31 +13,29 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // Default: Authenticated users can read
+    // Default: Authenticated users can read everything
     match /{document=**} {
       allow read: if isSignedIn();
     }
 
     // Users Collection
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn(); // Allow profile creation on first login
+      allow create: if isSignedIn();
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
       allow delete: if isAdmin();
     }
 
-    // Messages
-    match /messages/{messageId} {
+    // Text Chat Rooms
+    match /rooms/{roomId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isAdmin(); // Admins can moderate
-      allow delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-    }
-
-    // Channels
-    match /channels/{channelId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin(); // Only admins can manage channels
+      allow write: if isAdmin();
+      
+      match /messages/{messageId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn();
+        allow update: if isAdmin();
+        allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == resource.data.uid);
+      }
     }
 
     // WebRTC Rooms & Participants
@@ -46,14 +44,20 @@ service cloud.firestore {
       
       match /participants/{participantId} {
         allow read, write: if isSignedIn();
-      }
-      
-      match /participants/{participantId}/connections/{connectionId} {
-        allow read, write: if isSignedIn();
         
-        match /callerCandidates/{candidateId} { allow read, write: if isSignedIn(); }
-        match /calleeCandidates/{candidateId} { allow read, write: if isSignedIn(); }
+        match /connections/{connectionId} {
+          allow read, write: if isSignedIn();
+          
+          match /callerCandidates/{candidateId} { allow read, write: if isSignedIn(); }
+          match /calleeCandidates/{candidateId} { allow read, write: if isSignedIn(); }
+        }
       }
+    }
+
+    // Channels
+    match /channels/{channelId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // Server Config (Password)
