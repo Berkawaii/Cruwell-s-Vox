@@ -13,28 +13,18 @@ const servers = {
   iceServers: [{ urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] }]
 };
 
-const createFakeVideoTrack = () => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = 'black';
-  ctx.fillRect(0, 0, 1, 1);
-  const stream = canvas.captureStream(1);
-  return stream.getVideoTracks()[0];
-};
-
 export function VoiceProvider({ children }) {
   const { currentUser } = useAuth();
   const [roomId, setRoomId] = useState(null);
+  // localStream = raw mic audio stream (for peer connections)
+  // screenStream = display media stream
   const [localStream, setLocalStream] = useState(null);
+  const [screenStream, setScreenStream] = useState(null);
   const [remoteStreams, setRemoteStreams] = useState({});
   const [participantsMeta, setParticipantsMeta] = useState({});
   const [inRoom, setInRoom] = useState(false);
   const [micMuted, setMicMuted] = useState(false);
-  
   const [isScreenSharing, setIsScreenSharing] = useState(false);
-  const [screenStream, setScreenStream] = useState(null);
 
   const [deviceSettings, setDeviceSettings] = useState({
     audioInput: 'default',
@@ -43,139 +33,122 @@ export function VoiceProvider({ children }) {
     echoCancellation: true,
     autoGainControl: true,
     manualGain: 1.0,
-    noiseThreshold: -50 // dB
+    noiseThreshold: -50
   });
-  const [userVolumes, setUserVolumes] = useState({}); 
+  const [userVolumes, setUserVolumes] = useState({});
+
+  // Use refs for values needed inside long-lived callbacks
   const settingsRef = useRef(deviceSettings);
-
-  useEffect(() => {
-    settingsRef.current = deviceSettings;
-  }, [deviceSettings]);
-
-  const peerConnections = useRef({}); 
+  const micMutedRef = useRef(false);
+  const peerConnections = useRef({});
   const roomRef = useRef(null);
+  const localStreamRef = useRef(null);
+  const screenStreamRef = useRef(null);
   const gainNodeRef = useRef(null);
-  const audioCtxRef = useRef(null);
-  const noiseGateRef = useRef(null); // This is just a GainNode for gating
+  const noiseGateRef = useRef(null);
   const analyserRef = useRef(null);
+  const audioCtxRef = useRef(null);
+  const isRunningRef = useRef(false); // controls the RAF loop
 
-  useEffect(() => { return () => { leaveRoom(); }; }, []);
+  useEffect(() => { settingsRef.current = deviceSettings; }, [deviceSettings]);
+  useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
 
   const setParticipantVolume = (uid, volume) => {
-    setUserVolumes(prev => ({...prev, [uid]: volume}));
+    setUserVolumes(prev => ({ ...prev, [uid]: volume }));
   };
 
   const changeAudioSettings = async (key, value) => {
-    setDeviceSettings(prev => ({...prev, [key]: value}));
-    
-    if (key === 'manualGain' && gainNodeRef.current) {
+    setDeviceSettings(prev => ({ ...prev, [key]: value }));
+
+    if (key === 'manualGain' && gainNodeRef.current && audioCtxRef.current) {
       gainNodeRef.current.gain.setTargetAtTime(value, audioCtxRef.current.currentTime, 0.1);
       return;
     }
+    if (key === 'noiseThreshold') return;
 
-    if (key === 'noiseThreshold' && deviceSettings) {
-      // Logic handled in the processor loop
-      return;
-    }
+    if (['audioInput', 'noiseSuppression', 'echoCancellation', 'autoGainControl'].includes(key) && inRoom && localStreamRef.current) {
+      try {
+        const s = settingsRef.current;
+        const newStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: (key === 'audioInput' ? value : s.audioInput) !== 'default' ? { exact: key === 'audioInput' ? value : s.audioInput } : undefined,
+            noiseSuppression: key === 'noiseSuppression' ? value : s.noiseSuppression,
+            echoCancellation: key === 'echoCancellation' ? value : s.echoCancellation,
+            autoGainControl: key === 'autoGainControl' ? value : s.autoGainControl,
+          }
+        });
+        const newTrack = newStream.getAudioTracks()[0];
+        newTrack.enabled = !micMutedRef.current;
 
-    if ((key === 'audioInput' || key === 'noiseSuppression' || key === 'echoCancellation' || key === 'autoGainControl') && inRoom && localStream) {
-       try {
-         const newAudioInput = key === 'audioInput' ? value : deviceSettings.audioInput;
-         const newNS = key === 'noiseSuppression' ? value : deviceSettings.noiseSuppression;
-         const newEC = key === 'echoCancellation' ? value : deviceSettings.echoCancellation;
-         const newAGC = key === 'autoGainControl' ? value : deviceSettings.autoGainControl;
-         
-         const constraints = {
-           audio: {
-              deviceId: newAudioInput !== 'default' ? { exact: newAudioInput } : undefined,
-              noiseSuppression: newNS,
-              echoCancellation: newEC,
-              autoGainControl: newAGC
-           }
-         };
-         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-         const rawTrack = newStream.getAudioTracks()[0];
-         
-         // Re-pipe through existing GainNode if possible
-         if (audioCtxRef.current && gainNodeRef.current) {
-            // Need to create a new source from the new track
-            const source = audioCtxRef.current.createMediaStreamSource(new MediaStream([rawTrack]));
-            source.connect(gainNodeRef.current);
-            // destination is already connected to gainNode in joinRoom or previous calls
-            // Wait, we should probably recreate the whole chain to be safe
-         }
+        const oldTrack = localStreamRef.current.getAudioTracks()[0];
+        if (oldTrack) { localStreamRef.current.removeTrack(oldTrack); oldTrack.stop(); }
+        localStreamRef.current.addTrack(newTrack);
 
-         const oldTrack = localStream.getAudioTracks()[0];
-         localStream.removeTrack(oldTrack);
-         oldTrack.stop();
-         
-         localStream.addTrack(rawTrack); // Simplified for now, will refine pipe in next step
-         rawTrack.enabled = !micMuted;
-         
-         Object.values(peerConnections.current).forEach(pc => {
-           if (pc && typeof pc.getSenders === 'function') {
-             const sender = pc.getSenders().find(s => s.track && s.track.kind === 'audio');
-             if (sender) sender.replaceTrack(rawTrack);
-           }
-         });
-       } catch (e) {
-         console.error("Failed to swap audio device track", e);
-       }
+        // Re-pipe into AudioContext
+        if (audioCtxRef.current && gainNodeRef.current) {
+          const src = audioCtxRef.current.createMediaStreamSource(new MediaStream([newTrack]));
+          src.connect(gainNodeRef.current);
+        }
+
+        Object.values(peerConnections.current).forEach(pc => {
+          if (pc && typeof pc.getSenders === 'function') {
+            const s = pc.getSenders().find(s => s.track?.kind === 'audio');
+            if (s) s.replaceTrack(newTrack);
+          }
+        });
+      } catch (e) { console.error('Failed to swap audio device', e); }
     }
   };
 
   const toggleScreenShare = async () => {
-    if (!inRoom || !localStream || !roomRef.current) return;
+    if (!inRoom || !roomRef.current) return;
 
     if (isScreenSharing) {
-       if (screenStream) screenStream.getTracks().forEach(t => t.stop());
-       setScreenStream(null);
-       setIsScreenSharing(false);
-       
-       const fakeTrack = createFakeVideoTrack();
-       const currentVideoTrack = localStream.getVideoTracks()[0];
-       if (currentVideoTrack) {
-         localStream.removeTrack(currentVideoTrack);
-         currentVideoTrack.stop();
-       }
-       localStream.addTrack(fakeTrack);
+      // Stop screen share
+      if (screenStreamRef.current) {
+        screenStreamRef.current.getTracks().forEach(t => t.stop());
+        screenStreamRef.current = null;
+        setScreenStream(null);
+      }
+      setIsScreenSharing(false);
+      
+      // Replace video track in all peers with null/empty
+      Object.values(peerConnections.current).forEach(pc => {
+        if (pc && typeof pc.getSenders === 'function') {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) sender.replaceTrack(null);
+        }
+      });
 
-       Object.values(peerConnections.current).forEach(pc => {
-           if (pc && typeof pc.getSenders === 'function') {
-             const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-             if (sender) sender.replaceTrack(fakeTrack);
-           }
-       });
-
-       await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: false }).catch(()=>{});
+      await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: false }).catch(() => {});
     } else {
-       try {
-         const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-         setScreenStream(displayStream);
-         setIsScreenSharing(true);
-         
-         const newVideoTrack = displayStream.getVideoTracks()[0];
-         
-         newVideoTrack.onended = async () => {
-             setScreenStream(null);
-             setIsScreenSharing(false);
-             const fkTrack = createFakeVideoTrack();
-           localStream.removeTrack(currentVideoTrack);
-           currentVideoTrack.stop();
-         }
-         localStream.addTrack(newVideoTrack);
+      try {
+        const dispStream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+        screenStreamRef.current = dispStream;
+        setScreenStream(dispStream);
+        setIsScreenSharing(true);
 
-         Object.values(peerConnections.current).forEach(pc => {
-           if (pc && typeof pc.getSenders === 'function') {
-             const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-             if (sender) sender.replaceTrack(newVideoTrack);
-           }
-         });
+        const videoTrack = dispStream.getVideoTracks()[0];
+        videoTrack.onended = () => {
+          // User stopped via browser UI
+          if (isRunningRef.current) toggleScreenShare();
+        };
 
-         await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: true }).catch(()=>{});
-       } catch(e) {
-         console.error("Screen share error", e);
-       }
+        // Send video track to all existing peers
+        Object.values(peerConnections.current).forEach(pc => {
+          if (pc && typeof pc.getSenders === 'function') {
+            const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+            if (sender) {
+              sender.replaceTrack(videoTrack);
+            } else {
+              // Add it if there's no video sender yet
+              pc.addTrack(videoTrack, dispStream);
+            }
+          }
+        });
+
+        await updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isScreenSharing: true }).catch(() => {});
+      } catch (e) { console.error('Screen share error', e); }
     }
   };
 
@@ -186,112 +159,121 @@ export function VoiceProvider({ children }) {
     try {
       setRoomId(newRoomId);
       roomRef.current = doc(db, 'webrtc_rooms', newRoomId);
+      isRunningRef.current = true;
 
-      const constraints = {
+      const s = settingsRef.current;
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-           deviceId: deviceSettings.audioInput !== 'default' ? { exact: deviceSettings.audioInput } : undefined,
-           noiseSuppression: deviceSettings.noiseSuppression,
-           echoCancellation: deviceSettings.echoCancellation,
-           autoGainControl: deviceSettings.autoGainControl
+          deviceId: s.audioInput !== 'default' ? { exact: s.audioInput } : undefined,
+          noiseSuppression: s.noiseSuppression,
+          echoCancellation: s.echoCancellation,
+          autoGainControl: s.autoGainControl,
         },
         video: false
-      };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      
-      // Setup Audio Pipeline
+      });
+
+      localStreamRef.current = stream;
+
+      // ─── AudioContext Pipeline ─────────────────────────────────────────
       audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
       const source = audioCtxRef.current.createMediaStreamSource(stream);
+
       const gainNode = audioCtxRef.current.createGain();
-      gainNode.gain.value = deviceSettings.manualGain;
+      gainNode.gain.value = s.manualGain;
       gainNodeRef.current = gainNode;
-      
-      const destination = audioCtxRef.current.createMediaStreamDestination();
-      
+
       const analyser = audioCtxRef.current.createAnalyser();
-      analyser.fftSize = 2048;
+      analyser.fftSize = 1024;
       analyserRef.current = analyser;
-      
+
       const noiseGate = audioCtxRef.current.createGain();
+      noiseGate.gain.value = 1;
       noiseGateRef.current = noiseGate;
-      
+
+      const destination = audioCtxRef.current.createMediaStreamDestination();
+
       source.connect(gainNode);
-      gainNode.connect(analyser); // Analyser looks at the signal after manual gain
+      gainNode.connect(analyser);
       analyser.connect(noiseGate);
       noiseGate.connect(destination);
-      
-      // Noise Gate Processor Loop
-      let lastTime = Date.now();
+
+      // Noise Gate RAF loop — checks micMutedRef to avoid overriding mute
       const processNoiseGate = () => {
-        if (!inRoom || !audioCtxRef.current || !analyserRef.current || !noiseGateRef.current) return;
-        
+        if (!isRunningRef.current || !audioCtxRef.current || !analyserRef.current || !noiseGateRef.current) return;
+
+        // CRITICAL: if manually muted, always keep gate closed
+        if (micMutedRef.current) {
+          noiseGateRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.02);
+          requestAnimationFrame(processNoiseGate);
+          return;
+        }
+
         const dataArray = new Float32Array(analyserRef.current.fftSize);
         analyserRef.current.getFloatTimeDomainData(dataArray);
-        
         let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) {
-          sum += dataArray[i] * dataArray[i];
-        }
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i] * dataArray[i];
         const rms = Math.sqrt(sum / dataArray.length);
-        const db = 20 * Math.log10(rms);
-        
-        // Threshold check
+        const db = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+
         const threshold = settingsRef.current.noiseThreshold;
         if (db < threshold) {
-          // Gating out (Mute)
           noiseGateRef.current.gain.setTargetAtTime(0, audioCtxRef.current.currentTime, 0.05);
         } else {
-          // Passing through
           noiseGateRef.current.gain.setTargetAtTime(1, audioCtxRef.current.currentTime, 0.01);
         }
-        
         requestAnimationFrame(processNoiseGate);
       };
-      processNoiseGate();
-      
+      requestAnimationFrame(processNoiseGate);
+      // ──────────────────────────────────────────────────────────────────
+
+      // The stream we expose to React UI (for visualizer/loopback) is the processed one
       const processedStream = destination.stream;
-      const fakeVideoTrack = createFakeVideoTrack();
-      processedStream.addTrack(fakeVideoTrack);
 
       setLocalStream(processedStream);
       setInRoom(true);
-      
-      processedStream.getAudioTracks().forEach(t => t.enabled = !micMuted);
 
+      // Register self in Firestore
       const myParticipantRef = doc(roomRef.current, 'participants', currentUser.uid);
-      await setDoc(myParticipantRef, { 
+      await setDoc(myParticipantRef, {
         joinedAt: Date.now(),
         displayName: currentUser.displayName || 'Guest User',
         photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=${currentUser.displayName || 'Guest'}&background=random`,
         isScreenSharing: false,
-        isMuted: micMuted
+        isMuted: false
       });
 
+      // Listen to all participants metadata
       const unsubParticipants = onSnapshot(collection(roomRef.current, 'participants'), (snap) => {
         const meta = {};
         snap.docs.forEach(d => { meta[d.id] = d.data(); });
         setParticipantsMeta(meta);
       });
-      peerConnections.current['participantsListener'] = unsubParticipants;
+      peerConnections.current['_unsubParticipants'] = unsubParticipants;
 
+      // Listen for incoming offers (others calling us)
       const myConnectionsRef = collection(myParticipantRef, 'connections');
       const unsubIncoming = onSnapshot(myConnectionsRef, snapshot => {
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const data = change.doc.data();
+            // Pass the raw mic stream to peer connections; screen share is addTrack'd separately
             if (data.offer) handleIncomingOffer(change.doc.id, data.offer, stream);
           }
         });
       });
-      peerConnections.current['listener'] = unsubIncoming;
+      peerConnections.current['_unsubIncoming'] = unsubIncoming;
 
+      // Call everyone already in the room
       const participantsSnap = await getDocs(collection(roomRef.current, 'participants'));
       participantsSnap.forEach(pDoc => {
         if (pDoc.id !== currentUser.uid) initiateCall(pDoc.id, stream);
       });
+
     } catch (e) {
-      console.error("Error joining voice:", e);
+      console.error('Error joining voice:', e);
       setInRoom(false);
       setRoomId(null);
+      isRunningRef.current = false;
     }
   };
 
@@ -301,25 +283,28 @@ export function VoiceProvider({ children }) {
 
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    pc.ontrack = event => { setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] })); };
+    pc.ontrack = event => {
+      setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
+    };
 
     const targetConnectionRef = doc(roomRef.current, 'participants', targetUid, 'connections', currentUser.uid);
     const callerCandidatesCollection = collection(targetConnectionRef, 'callerCandidates');
-    
+
     pc.onicecandidate = event => {
       if (event.candidate) addDoc(callerCandidatesCollection, event.candidate.toJSON());
     };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
-
     await setDoc(targetConnectionRef, { offer: { type: offer.type, sdp: offer.sdp } });
 
     const unsubAnswer = onSnapshot(targetConnectionRef, snapshot => {
       const data = snapshot.data();
-      if (data?.answer && !pc.currentRemoteDescription) pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      if (data?.answer && !pc.currentRemoteDescription) {
+        pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+      }
     });
-    peerConnections.current[`unsubAnswer_${targetUid}`] = unsubAnswer;
+    peerConnections.current[`_unsubAnswer_${targetUid}`] = unsubAnswer;
 
     const calleeCandidatesCollection = collection(targetConnectionRef, 'calleeCandidates');
     const unsubIce = onSnapshot(calleeCandidatesCollection, snapshot => {
@@ -327,7 +312,7 @@ export function VoiceProvider({ children }) {
         if (change.type === 'added') pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
       });
     });
-    peerConnections.current[`unsubIce_${targetUid}`] = unsubIce;
+    peerConnections.current[`_unsubIce_${targetUid}`] = unsubIce;
   };
 
   const handleIncomingOffer = async (callerUid, offer, stream) => {
@@ -336,7 +321,9 @@ export function VoiceProvider({ children }) {
 
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-    pc.ontrack = event => { setRemoteStreams(prev => ({ ...prev, [callerUid]: event.streams[0] })); };
+    pc.ontrack = event => {
+      setRemoteStreams(prev => ({ ...prev, [callerUid]: event.streams[0] }));
+    };
 
     const myConnectionRef = doc(roomRef.current, 'participants', currentUser.uid, 'connections', callerUid);
     const calleeCandidatesCollection = collection(myConnectionRef, 'calleeCandidates');
@@ -348,7 +335,6 @@ export function VoiceProvider({ children }) {
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
-
     await updateDoc(myConnectionRef, { answer: { type: answer.type, sdp: answer.sdp } });
 
     const callerCandidatesCollection = collection(myConnectionRef, 'callerCandidates');
@@ -357,63 +343,71 @@ export function VoiceProvider({ children }) {
         if (change.type === 'added') pc.addIceCandidate(new RTCIceCandidate(change.doc.data()));
       });
     });
-    peerConnections.current[`unsubIce_${callerUid}`] = unsubIce;
+    peerConnections.current[`_unsubIce_${callerUid}`] = unsubIce;
   };
 
   const toggleMute = () => {
-    if (localStream) {
-      const newMuted = !micMuted;
-      localStream.getAudioTracks().forEach(track => { track.enabled = !newMuted; });
-      
-      // Also mute the processing nodes for safety
-      if (audioCtxRef.current && gainNodeRef.current) {
-        gainNodeRef.current.gain.setTargetAtTime(newMuted ? 0 : settingsRef.current.manualGain, audioCtxRef.current.currentTime, 0.05);
-      }
-      
-      setMicMuted(newMuted);
-      if (roomRef.current && currentUser?.uid) {
-         updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isMuted: newMuted }).catch(()=>{});
-      }
-    } else {
-      setMicMuted(!micMuted);
+    const newMuted = !micMutedRef.current;
+    micMutedRef.current = newMuted; // Update ref immediately for the RAF loop
+    setMicMuted(newMuted);
+
+    // Mute the raw mic tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = !newMuted; });
+    }
+
+    // Sync to Firestore
+    if (roomRef.current && currentUser?.uid) {
+      updateDoc(doc(roomRef.current, 'participants', currentUser.uid), { isMuted: newMuted }).catch(() => {});
     }
   };
 
   const leaveRoom = async () => {
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); }
-    if (screenStream) { screenStream.getTracks().forEach(t => t.stop()); }
+    isRunningRef.current = false;
 
+    if (localStreamRef.current) { localStreamRef.current.getTracks().forEach(t => t.stop()); localStreamRef.current = null; }
+    if (screenStreamRef.current) { screenStreamRef.current.getTracks().forEach(t => t.stop()); screenStreamRef.current = null; }
+
+    // Close all peer connections and unsub listeners
     Object.keys(peerConnections.current).forEach(key => {
-      if (typeof peerConnections.current[key] === 'function') peerConnections.current[key](); 
-      else peerConnections.current[key].close(); 
+      const item = peerConnections.current[key];
+      if (typeof item === 'function') item();
+      else if (item && typeof item.close === 'function') item.close();
     });
-    
     peerConnections.current = {};
-    setRemoteStreams({});
-    setUserVolumes({}); 
-    setParticipantsMeta({});
-    setInRoom(false);
-    setLocalStream(null);
-    setScreenStream(null);
-    setIsScreenSharing(false);
+
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {});
+      audioCtxRef.current = null;
+    }
 
     try {
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close().catch(()=>{});
-        audioCtxRef.current = null;
+      if (currentUser?.uid && roomRef.current) {
+        await deleteDoc(doc(roomRef.current, 'participants', currentUser.uid));
       }
-      if (currentUser?.uid && roomRef.current) await deleteDoc(doc(roomRef.current, 'participants', currentUser.uid));
     } catch (e) {}
-    
-    setRoomId(null);
+
     roomRef.current = null;
+    setLocalStream(null);
+    setScreenStream(null);
+    setRemoteStreams({});
+    setParticipantsMeta({});
+    setUserVolumes({});
+    setInRoom(false);
+    setIsScreenSharing(false);
+    setMicMuted(false);
+    micMutedRef.current = false;
+    setRoomId(null);
   };
 
-  const value = { 
-    roomId, localStream, remoteStreams, participantsMeta, 
+  useEffect(() => { return () => { leaveRoom(); }; }, []);
+
+  const value = {
+    roomId, localStream, screenStream, remoteStreams, participantsMeta,
     inRoom, joinRoom, leaveRoom, micMuted, toggleMute,
     deviceSettings, changeAudioSettings, userVolumes, setParticipantVolume,
-    isScreenSharing, toggleScreenShare
+    isScreenSharing, toggleScreenShare,
+    analyserRef, audioCtxRef // expose for SettingsModal loopback/visualizer
   };
 
   return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;

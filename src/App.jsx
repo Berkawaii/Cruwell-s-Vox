@@ -12,6 +12,8 @@ import InviteModal from './components/InviteModal';
 import AdminModal from './components/AdminModal';
 import ChannelModal from './components/ChannelModal';
 import { useChannels } from './hooks/useChannels';
+import { useUsers } from './hooks/useUsers';
+import { useGlobalParticipants } from './hooks/useGlobalParticipants';
 import { LogOut, Hash, Volume2, Plus, Mic, MicOff, PhoneOff, Settings, Monitor, MonitorOff, ShieldAlert, Edit2, Trash2 } from 'lucide-react';
 
 function AudioPlayer({ stream, volume, sinkId }) {
@@ -37,6 +39,8 @@ function App() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const { channels, createChannel, updateChannelName, removeChannel } = useChannels();
+  const { users } = useUsers();
+  const globalParticipants = useGlobalParticipants();
   const [channelModalConfig, setChannelModalConfig] = useState(null);
 
   if (!currentUser) return <Login />;
@@ -152,13 +156,15 @@ function App() {
                 )}
               </div>
               
-              {roomId === c.id && (
+              {globalParticipants[c.id] && (
                 <div className="voice-participants-sidebar">
-                  <SidebarVoiceUser meta={{ photoURL, displayName }} stream={localStream} />
-                  {Object.entries(participantsMeta).map(([uid, meta]) => {
-                    if (uid === currentUser.uid) return null;
-                    return <SidebarVoiceUser key={uid} meta={meta} stream={remoteStreams[uid]} />;
-                  })}
+                  {globalParticipants[c.id].map((participant) => (
+                    <SidebarVoiceUser 
+                      key={participant.uid} 
+                      meta={participant} 
+                      stream={participant.uid === currentUser.uid ? localStream : remoteStreams[participant.uid]} 
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -216,11 +222,15 @@ function App() {
 
       {activeChannel.type === 'text' && (
         <aside className="members-sidebar">
-          <h3 className="members-category">ONLINE - 1</h3>
-          <div className="member-item">
-            <img src={photoURL} className="avatar" alt="Avatar" />
-            <span className="member-name">{displayName}</span>
-          </div>
+          <h3 className="members-category">ONLINE — {users.length}</h3>
+          {users.map(u => (
+            <div key={u.uid} className="member-item">
+              <img src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}&background=random`} className="avatar" alt={u.displayName} />
+              <span className="member-name" style={{ color: u.role === 'admin' ? 'var(--danger)' : 'var(--text-normal)' }}>
+                {u.displayName}
+              </span>
+            </div>
+          ))}
         </aside>
       )}
     </div>
