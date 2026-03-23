@@ -1,0 +1,217 @@
+.voice-area {
+  flex: 1;
+  margin: 24px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--surface-container);
+  overflow: hidden;
+  position: relative;
+  box-shadow: inset 0 4px 32px rgba(0,0,0,0.4);
+}
+
+.join-voice-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 16px;
+}
+
+.voice-icon-large {
+  width: 120px;
+  height: 120px;
+  background-color: var(--surface-container-highest);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.btn-join {
+  margin-top: 16px;
+  font-size: 16px;
+  padding: 12px 24px;
+}
+
+.active-voice-container {
+  height: 100%;
+  width: 100%;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  align-content: start;
+  overflow-y: auto;
+}
+
+.remote-participant-wrapper {
+  background-color: var(--surface-container-high);
+  border-radius: 12px;
+  padding-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.voice-participant {
+  height: 200px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.voice-participant:not(.remote) {
+  background-color: var(--surface-container-high);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+
+.user-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 80%;
+  margin-top: 4px;
+}
+
+.volume-slider {
+  flex: 1;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.voice-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  margin-bottom: 12px;
+  border: 3px solid transparent; 
+  transition: all 0.1s ease;
+}
+
+.voice-avatar.speaking {
+  border-color: var(--secondary);
+  box-shadow: 0 0 16px var(--secondary);
+  animation: pulse-aura 1.5s infinite alternate;
+}
+
+.voice-name {
+  color: white;
+  font-weight: 500;
+  font-size: 14px;
+  background: rgba(0,0,0,0.5);
+  padding: 4px 12px;
+  border-radius: 12px;
+}
+
+.mute-indicator {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background-color: var(--danger);
+  border-radius: 50%;
+  padding: 4px;
+  display: flex;
+}
+
+.screen-sharing-wrapper {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.voice-participant.screen-sharing {
+  width: 100%;
+  height: auto;
+  min-height: 400px;
+  background: black;
+  border-radius: 8px;
+}
+
+.video-container {
+  width: 100%;
+  height: 100%;
+  min-height: 400px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: black;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.screen-video {
+  width: 100%;
+  height: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+}
+
+.video-overlay-name {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.voice-controls {
+  height: 80px;
+  margin-top: 16px;
+  background-color: var(--surface-container-highest);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+.control-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--outline_variant);
+  background-color: var(--surface_variant);
+  color: var(--text-normal);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.control-btn:hover {
+  background-color: var(--surface-container-lowest);
+  transform: translateY(-2px);
+}
+
+.control-btn.muted {
+  background-color: white;
+  color: #111;
+}
+
+.control-btn.btn-danger {
+  background-color: var(--danger);
+  color: white;
+}
+.control-btn.btn-danger:hover {
+  background-color: var(--danger-hover);
+}

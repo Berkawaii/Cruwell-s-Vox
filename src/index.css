@@ -1,0 +1,181 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@600;700&display=swap');
+
+:root {
+  /* No-line Rule & Atmospheric Depth Colors */
+  --background: #0c0e12;
+  --surface-container-lowest: #08090a;
+  --surface-container-low: #111318;
+  --surface-container: #171a1f;
+  --surface-container-high: #1c1f25;
+  --surface-container-highest: #23262c;
+  --surface-bright: #2b2e36;
+  
+  /* Electric Kinetic Accents */
+  --primary: #88adff;
+  --primary_dim: #0f6ef0;
+  --secondary: #b884ff;
+  --tertiary: #a1faff;
+  --surface_tint: rgba(136, 173, 255, 0.3); /* used for ambient shadows */
+  
+  /* Glassmorphism & Borders */
+  --surface_variant: rgba(23, 26, 31, 0.6);
+  --outline_variant: rgba(255, 255, 255, 0.15); /* 15% opacity ghost border */
+
+  /* Text Colors */
+  --text-normal: #e0e2e8;
+  --text-muted: #aaabb0; /* on_surface_variant */
+
+  /* Spacing Tokens */
+  --space-8: 0.5rem;
+  --space-16: 1rem;
+  --space-24: 1.5rem;
+  
+  /* Danger (Retrofit from previous) */
+  --danger: #da373c;
+  --danger-hover: #a12828;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--background);
+  color: var(--text-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -2%;
+}
+
+.label-text {
+  font-family: 'Manrope', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-container-lowest);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-container-highest);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary_dim);
+}
+
+#root {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Glassmorphism utilities */
+.glass-panel {
+  background: var(--surface_variant);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--outline_variant);
+}
+
+/* Kinetic Buttons */
+.btn {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  border-radius: 1rem; /* lg */
+  padding: 12px 24px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.sidebar-voice-user {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 4px 0;
+  margin-top: 4px;
+  border-radius: 4px;
+}
+
+.sidebar-voice-user-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-voice-user:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-kinetic-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary_dim));
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.btn-kinetic-primary:hover {
+  box-shadow: 0 0 15px var(--surface_tint);
+  transform: translateY(-2px);
+}
+
+.btn-kinetic-secondary {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--outline_variant);
+}
+.btn-kinetic-secondary:hover {
+  box-shadow: 0 0 15px var(--surface_tint);
+  border-color: var(--primary);
+}
+
+.btn-danger {
+  background-color: var(--danger);
+  color: white;
+}
+.btn-danger:hover {
+  background-color: var(--danger-hover);
+}
+
+/* Inputs */
+.input-base {
+  background-color: var(--bg-tertiary);
+  border: none;
+  border-radius: 3px;
+  padding: 10px;
+  color: var(--text-normal);
+  font-family: 'Inter', sans-serif;
+  width: 100%;
+  outline: none;
+  transition: border 0.2s ease;
+}
+.input-base:focus {
+  outline: 1px solid var(--brand);
+}
