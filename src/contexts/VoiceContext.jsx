@@ -175,6 +175,10 @@ export function VoiceProvider({ children }) {
 
       // ─── AudioContext Pipeline ─────────────────────────────────────────
       audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {});
+      }
+      
       const source = audioCtxRef.current.createMediaStreamSource(stream);
 
       const gainNode = audioCtxRef.current.createGain();
@@ -420,7 +424,8 @@ export function VoiceProvider({ children }) {
     let lastAppliedOffer = initialOffer.sdp;
     let iceBuffer = [];
 
-    pc.onnegotiationneeded = async () => {
+    // Define the handler, but do NOT attach it yet
+    const handleNegotiationNeeded = async () => {
       try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
@@ -442,6 +447,9 @@ export function VoiceProvider({ children }) {
     const initialAnswer = await pc.createAnswer();
     await pc.setLocalDescription(initialAnswer);
     await setDoc(connectionRef, { calleeAnswer: { type: initialAnswer.type, sdp: initialAnswer.sdp }, timestamp: Date.now() }, { merge: true });
+
+    // Attach handler AFTER initial SDP is resolved to prevent SDP glare (sending calleeOffer immediately after calleeAnswer)
+    pc.onnegotiationneeded = handleNegotiationNeeded;
 
     pc.onicecandidate = event => {
       if (event.candidate) addDoc(collection(connectionRef, 'calleeCandidates'), event.candidate.toJSON());

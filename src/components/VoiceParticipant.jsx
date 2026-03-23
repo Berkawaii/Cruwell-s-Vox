@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useSpeaking } from '../hooks/useSpeaking';
 import { useVoice } from '../contexts/VoiceContext';
-import { MicOff } from 'lucide-react';
+import { MicOff, Maximize } from 'lucide-react';
 
 export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
   const { screenStream } = useVoice();
@@ -25,12 +25,27 @@ export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
     }
   }, [showVideo, isLocal, screenStream, stream]);
 
+  const toggleFullscreen = () => {
+    if (videoRef.current) {
+      if (videoRef.current.requestFullscreen) {
+        videoRef.current.requestFullscreen();
+      } else if (videoRef.current.webkitRequestFullscreen) {
+        videoRef.current.webkitRequestFullscreen();
+      } else if (videoRef.current.msRequestFullscreen) {
+        videoRef.current.msRequestFullscreen();
+      }
+    }
+  };
+
   return (
     <div className={`voice-participant ${isLocal ? '' : 'remote'} ${showVideo ? 'screen-sharing' : ''}`}>
       {showVideo ? (
         <div className="video-container">
           <video ref={videoRef} autoPlay playsInline muted className="screen-video" />
           <div className="video-overlay-name">{meta?.displayName} {isLocal && '(You)'}</div>
+          <button className="fullscreen-btn" onClick={toggleFullscreen} title="Full Screen">
+            <Maximize size={16} color="white" />
+          </button>
         </div>
       ) : (
         <>
