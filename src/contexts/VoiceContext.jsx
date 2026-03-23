@@ -36,7 +36,8 @@ export function VoiceProvider({ children }) {
     echoCancellation: true,
     autoGainControl: true,
     manualGain: 1.0,
-    noiseThreshold: -50
+    noiseThreshold: -50,
+    useRNNoise: true
   });
   const [userVolumes, setUserVolumes] = useState({});
 
@@ -52,6 +53,8 @@ export function VoiceProvider({ children }) {
   const analyserRef = useRef(null);
   const audioCtxRef = useRef(null);
   const isRunningRef = useRef(false); // controls the RAF loop
+  const rnnoiseNodeRef = useRef(null); // RNNoise AudioWorklet node
+  const compressorRef = useRef(null); // DynamicsCompressor node
 
   useEffect(() => { settingsRef.current = deviceSettings; }, [deviceSettings]);
   useEffect(() => { micMutedRef.current = micMuted; }, [micMuted]);
@@ -68,6 +71,12 @@ export function VoiceProvider({ children }) {
       return;
     }
     if (key === 'noiseThreshold') return;
+
+    if (key === 'useRNNoise' && rnnoiseNodeRef.current) {
+      // Send message to RNNoise processor to enable/disable
+      rnnoiseNodeRef.current.port.postMessage({ type: 'enable', enabled: value });
+      return;
+    }
 
     if (['audioInput', 'noiseSuppression', 'echoCancellation', 'autoGainControl'].includes(key) && inRoom && localStreamRef.current) {
       try {
@@ -181,6 +190,27 @@ export function VoiceProvider({ children }) {
       
       const source = audioCtxRef.current.createMediaStreamSource(stream);
 
+      // ──── RNNoise AudioWorklet ────────────────────────────────────────
+      let rnnoiseNode = null;
+      if (s.useRNNoise) {
+        try {
+          await audioCtxRef.current.audioWorklet.addModule('/rnnoise-processor.js');
+          rnnoiseNode = new AudioWorkletNode(audioCtxRef.current, 'rnnoise-processor');
+          rnnoiseNodeRef.current = rnnoiseNode;
+        } catch (error) {
+          console.warn('Failed to load RNNoise AudioWorklet:', error);
+        }
+      }
+
+      // ──── Compressor (Dynamic Range Compression) ──────────────────────
+      const compressor = audioCtxRef.current.createDynamicsCompressor();
+      compressor.threshold.value = -50; // dB
+      compressor.knee.value = 40; // dB (smooth transition)
+      compressor.ratio.value = 12; // Compression ratio
+      compressor.attack.value = 0.003; // Fast attack (3ms)
+      compressor.release.value = 0.25; // Moderate release
+      compressorRef.current = compressor;
+
       const gainNode = audioCtxRef.current.createGain();
       gainNode.gain.value = s.manualGain;
       gainNodeRef.current = gainNode;
@@ -195,9 +225,14 @@ export function VoiceProvider({ children }) {
 
       const destination = audioCtxRef.current.createMediaStreamDestination();
 
-      source.connect(gainNode);
-      gainNode.connect(analyser);
-      analyser.connect(noiseGate);
+      // Connect pipeline: source -> RNNoise -> Compressor -> Analyser -> gainNode -> noiseGate -> destination
+      source.connect(rnnoiseNode || gainNode);
+      if (rnnoiseNode) {
+        rnnoiseNode.connect(compressor);
+      }
+      compressor.connect(analyser);
+      analyser.connect(gainNode);
+      gainNode.connect(noiseGate);
       noiseGate.connect(destination);
 
       // Noise Gate RAF loop — checks micMutedRef to avoid overriding mute

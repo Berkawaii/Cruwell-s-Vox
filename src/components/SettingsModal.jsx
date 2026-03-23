@@ -235,21 +235,6 @@ export default function SettingsModal({ onClose }) {
 
           <div className="settings-section toggle-section">
             <div className="toggle-info">
-              <h3 className="section-label">Noise Cancellation (Suppression)</h3>
-              <p>Uses AI features in the browser to filter out background noises like typings or fans.</p>
-            </div>
-            <label className="switch">
-              <input 
-                type="checkbox" 
-                checked={deviceSettings.noiseSuppression} 
-                onChange={e => changeAudioSettings('noiseSuppression', e.target.checked)}
-              />
-              <span className="slider round"></span>
-            </label>
-          </div>
-
-          <div className="settings-section toggle-section">
-            <div className="toggle-info">
               <h3 className="section-label">Echo Cancellation</h3>
               <p>Prevents feedback loops and speaker screeching computationally. Recommended!</p>
             </div>
@@ -258,6 +243,21 @@ export default function SettingsModal({ onClose }) {
                 type="checkbox" 
                 checked={deviceSettings.echoCancellation} 
                 onChange={e => changeAudioSettings('echoCancellation', e.target.checked)}
+              />
+              <span className="slider round"></span>
+            </label>
+          </div>
+
+          <div className="settings-section toggle-section">
+            <div className="toggle-info">
+              <h3 className="section-label">RNNoise ML Suppression</h3>
+              <p>Advanced machine learning-based noise suppression using WASM. Filters keyboard clicks, mouse sounds, and background noise.</p>
+            </div>
+            <label className="switch">
+              <input 
+                type="checkbox" 
+                checked={deviceSettings.useRNNoise} 
+                onChange={e => changeAudioSettings('useRNNoise', e.target.checked)}
               />
               <span className="slider round"></span>
             </label>
