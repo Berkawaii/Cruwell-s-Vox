@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function for Auth
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper function for Admin
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Default: Authenticated users can read
+    match /{document=**} {
+      allow read: if isSignedIn();
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn(); // Allow profile creation on first login
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId);
+      allow delete: if isAdmin();
+    }
+
+    // Messages
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isAdmin(); // Admins can moderate
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
+    }
+
+    // Channels
+    match /channels/{channelId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin(); // Only admins can manage channels
+    }
+
+    // WebRTC Rooms & Participants
+    match /webrtc_rooms/{roomId} {
+      allow read, write: if isSignedIn();
+      
+      match /participants/{participantId} {
+        allow read, write: if isSignedIn();
+      }
+      
+      match /participants/{participantId}/connections/{connectionId} {
+        allow read, write: if isSignedIn();
+        
+        match /callerCandidates/{candidateId} { allow read, write: if isSignedIn(); }
+        match /calleeCandidates/{candidateId} { allow read, write: if isSignedIn(); }
+      }
+    }
+
+    // Server Config (Password)
+    match /config/server {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+  }
+}
