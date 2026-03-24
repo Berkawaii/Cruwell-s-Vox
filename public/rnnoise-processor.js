@@ -1,104 +1,123 @@
 /**
  * RNNoise AudioWorklet Processor
- * Processes audio in real-time using RNNoise WASM for noise suppression
+ * Uses the sync wasm loader so WorkletGlobalScope can initialize synchronously.
  */
 
-import { RNNoise } from '@jitsi/rnnoise-wasm';
+import createRNNWasmModuleSync from '/rnnoise-sync.js';
 
 class RNNoiseProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    
-    this.rnnoise = null;
+
+    this.module = null;
+    this.statePtr = 0;
+    this.inPtr = 0;
+    this.outPtr = 0;
     this.isInitialized = false;
-    this.frameSize = 480; // RNNoise frame size for 48kHz (10ms)
+    this.enabled = true;
+
+    this.frameSize = 480; // RNNoise frame size for 48kHz / 10ms
     this.inputBuffer = new Float32Array(this.frameSize);
     this.outputBuffer = new Float32Array(this.frameSize);
     this.bufferIndex = 0;
+    this.pendingOutput = [];
+    this.pendingOutputReadIndex = 0;
 
-    // Initialize RNNoise
-    this.initRNNoise();
-
-    // Listen for messages from main thread
     this.port.onmessage = (event) => {
-      if (event.data.type === 'enable') {
+      if (event.data?.type === 'enable') {
         this.enabled = event.data.enabled;
       }
     };
 
-    this.enabled = true;
+    this.initRNNoise();
   }
 
   async initRNNoise() {
     try {
-      // Initialize the RNNoise WASM module
-      await RNNoise.initWasm();
-      this.rnnoise = new RNNoise();
+      this.module = createRNNWasmModuleSync();
+      await this.module.ready;
+
+      this.module._rnnoise_init();
+      this.statePtr = this.module._rnnoise_create();
+      this.inPtr = this.module._malloc(this.frameSize * 4);
+      this.outPtr = this.module._malloc(this.frameSize * 4);
+
       this.isInitialized = true;
-      console.log('RNNoise initialized successfully');
       this.port.postMessage({ type: 'initialized' });
     } catch (error) {
       console.error('Failed to initialize RNNoise:', error);
-      this.port.postMessage({ type: 'error', message: error.message });
+      this.port.postMessage({ type: 'error', message: error?.message || 'RNNoise init failed' });
     }
   }
 
-  process(inputs, outputs, parameters) {
-    if (!this.isInitialized || !this.enabled) {
-      // Pass through if not initialized or disabled
-      if (inputs[0] && inputs[0][0]) {
-        outputs[0][0].set(inputs[0][0]);
+  denoiseFrame(inputFrame) {
+    const heapOffsetIn = this.inPtr >> 2;
+    const heapOffsetOut = this.outPtr >> 2;
+
+    this.module.HEAPF32.set(inputFrame, heapOffsetIn);
+    this.module._rnnoise_process_frame(this.statePtr, this.outPtr, this.inPtr);
+
+    const denoised = this.module.HEAPF32.subarray(heapOffsetOut, heapOffsetOut + this.frameSize);
+    this.outputBuffer.set(denoised);
+  }
+
+  enqueueFrame(frame) {
+    for (let i = 0; i < frame.length; i++) {
+      this.pendingOutput.push(frame[i]);
+    }
+  }
+
+  dequeueSample(fallback) {
+    if (this.pendingOutputReadIndex < this.pendingOutput.length) {
+      const sample = this.pendingOutput[this.pendingOutputReadIndex];
+      this.pendingOutputReadIndex += 1;
+
+      if (this.pendingOutputReadIndex > 4096 && this.pendingOutputReadIndex * 2 > this.pendingOutput.length) {
+        this.pendingOutput = this.pendingOutput.slice(this.pendingOutputReadIndex);
+        this.pendingOutputReadIndex = 0;
       }
+
+      return sample;
+    }
+
+    return fallback;
+  }
+
+  process(inputs, outputs) {
+    const input = inputs[0]?.[0];
+    const output = outputs[0]?.[0];
+
+    if (!output) return true;
+
+    if (!input || !this.isInitialized || !this.enabled) {
+      if (input) output.set(input);
+      else output.fill(0);
       return true;
     }
 
-    const input = inputs[0][0];
-    const output = outputs[0][0];
-
-    if (!input) {
-      output.fill(0);
-      return true;
-    }
-
-    // Process audio frame by frame (RNNoise requires fixed 480-sample frames)
+    // First, ingest input and process complete RNNoise frames.
     let inputIndex = 0;
-
     while (inputIndex < input.length) {
-      // Fill the input buffer
-      const samplesToRead = Math.min(
-        this.frameSize - this.bufferIndex,
-        input.length - inputIndex
-      );
-
-      this.inputBuffer.set(
-        input.subarray(inputIndex, inputIndex + samplesToRead),
-        this.bufferIndex
-      );
-
+      const samplesToRead = Math.min(this.frameSize - this.bufferIndex, input.length - inputIndex);
+      this.inputBuffer.set(input.subarray(inputIndex, inputIndex + samplesToRead), this.bufferIndex);
       this.bufferIndex += samplesToRead;
       inputIndex += samplesToRead;
 
-      // Process when we have a complete frame
       if (this.bufferIndex === this.frameSize) {
         try {
-          // Apply RNNoise denoising
-          this.rnnoise.denoise(this.inputBuffer, this.outputBuffer);
-
-          // Write output
-          output.set(this.outputBuffer, inputIndex - this.frameSize);
+          this.denoiseFrame(this.inputBuffer);
+          this.enqueueFrame(this.outputBuffer);
         } catch (error) {
           console.error('RNNoise processing error:', error);
-          output.set(this.inputBuffer, inputIndex - this.frameSize);
+          this.enqueueFrame(this.inputBuffer);
         }
-
-        // Reset buffer index for next frame
         this.bufferIndex = 0;
       }
     }
 
-    // If there's remaining audio less than a full frame, pass it through
-    if (this.bufferIndex > 0) {
-      output.set(this.inputBuffer.subarray(0, this.bufferIndex), input.length - this.bufferIndex);
+    // Then, render exactly one output quantum from the queued denoised samples.
+    for (let i = 0; i < output.length; i++) {
+      output[i] = this.dequeueSample(input[i] ?? 0);
     }
 
     return true;

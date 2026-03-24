@@ -48,6 +48,7 @@ export function VoiceProvider({ children }) {
   const roomRef = useRef(null);
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
+  const pendingCallsRef = useRef(new Set());
   const gainNodeRef = useRef(null);
   const noiseGateRef = useRef(null);
   const analyserRef = useRef(null);
@@ -61,6 +62,11 @@ export function VoiceProvider({ children }) {
 
   const setParticipantVolume = (uid, volume) => {
     setUserVolumes(prev => ({ ...prev, [uid]: volume }));
+  };
+
+  const shouldInitiateCall = (targetUid) => {
+    // Deterministic caller election avoids double-dial glare when users join simultaneously.
+    return String(currentUser?.uid || '') < String(targetUid);
   };
 
   const changeAudioSettings = async (key, value) => {
@@ -225,8 +231,8 @@ export function VoiceProvider({ children }) {
 
       const destination = audioCtxRef.current.createMediaStreamDestination();
 
-      // Connect pipeline: source -> RNNoise -> Compressor -> Analyser -> gainNode -> noiseGate -> destination
-      source.connect(rnnoiseNode || gainNode);
+      // Connect pipeline: source -> (RNNoise?) -> Compressor -> Analyser -> gainNode -> noiseGate -> destination
+      source.connect(rnnoiseNode || compressor);
       if (rnnoiseNode) {
         rnnoiseNode.connect(compressor);
       }
@@ -296,6 +302,21 @@ export function VoiceProvider({ children }) {
         const meta = {};
         snap.docs.forEach(d => { meta[d.id] = d.data(); });
         setParticipantsMeta(meta);
+
+        snap.docChanges().forEach(change => {
+          if (change.type !== 'added') return;
+          const uid = change.doc.id;
+          if (uid === currentUser.uid) return;
+
+          // Create only one outbound connection per peer across all clients.
+          if (!shouldInitiateCall(uid)) return;
+          if (peerConnections.current[uid] || pendingCallsRef.current.has(uid)) return;
+
+          pendingCallsRef.current.add(uid);
+          initiateCall(uid, processedStream)
+            .catch(err => console.error('Failed to initiate call on participant add:', err))
+            .finally(() => pendingCallsRef.current.delete(uid));
+        });
       });
       peerConnections.current['_unsubParticipants'] = unsubParticipants;
 
@@ -315,7 +336,14 @@ export function VoiceProvider({ children }) {
       // Call everyone already in the room — send processedStream (noise-gated)
       const participantsSnap = await getDocs(collection(roomRef.current, 'participants'));
       participantsSnap.forEach(pDoc => {
-        if (pDoc.id !== currentUser.uid) initiateCall(pDoc.id, processedStream);
+        if (pDoc.id === currentUser.uid) return;
+        if (!shouldInitiateCall(pDoc.id)) return;
+        if (peerConnections.current[pDoc.id] || pendingCallsRef.current.has(pDoc.id)) return;
+
+        pendingCallsRef.current.add(pDoc.id);
+        initiateCall(pDoc.id, processedStream)
+          .catch(err => console.error('Failed to initiate call on room join:', err))
+          .finally(() => pendingCallsRef.current.delete(pDoc.id));
       });
 
     } catch (e) {
@@ -356,6 +384,12 @@ export function VoiceProvider({ children }) {
 
     const pc = new RTCPeerConnection(servers);
     peerConnections.current[targetUid] = pc;
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        try { pc.restartIce(); } catch (_) {}
+      }
+    };
 
     pc.ontrack = event => {
       setRemoteStreams(prev => {
@@ -445,6 +479,12 @@ export function VoiceProvider({ children }) {
     const pc = new RTCPeerConnection(servers);
     peerConnections.current[callerUid] = pc;
     const connectionRef = doc(roomRef.current, 'participants', currentUser.uid, 'connections', callerUid);
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') {
+        try { pc.restartIce(); } catch (_) {}
+      }
+    };
 
     pc.ontrack = event => {
       setRemoteStreams(prev => {
@@ -559,6 +599,7 @@ export function VoiceProvider({ children }) {
       else if (item && typeof item.close === 'function') item.close();
     });
     peerConnections.current = {};
+    pendingCallsRef.current.clear();
 
     if (audioCtxRef.current) {
       audioCtxRef.current.close().catch(() => {});
