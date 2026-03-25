@@ -88,6 +88,18 @@
   border-radius: 8px;
 }
 
+.login-download-btn {
+  border: 1px solid var(--outline_variant);
+  background: var(--surface-container-high);
+  color: var(--text-normal);
+  transition: all 0.2s ease;
+}
+
+.login-download-btn:hover {
+  background: var(--bg-modifier-active);
+  border-color: var(--primary_dim);
+}
+
 .btn-guest {
   background-color: #4e5058;
   color: white;

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { LogIn } from 'lucide-react';
+import { LogIn, Download } from 'lucide-react';
 import './Login.css';
 
-export default function Login() {
+export default function Login({ onOpenDownloads }) {
   const { loginWithGoogle } = useAuth();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,6 +41,15 @@ export default function Login() {
           >
             <LogIn size={20} />
             <span>Sign in with Google</span>
+          </button>
+
+          <button
+            className="btn login-btn login-download-btn"
+            onClick={onOpenDownloads}
+            type="button"
+          >
+            <Download size={18} />
+            <span>Download Desktop App</span>
           </button>
         </div>
       </div>

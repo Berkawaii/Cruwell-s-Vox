@@ -14,7 +14,7 @@ import ChannelModal from './components/ChannelModal';
 import { useChannels } from './hooks/useChannels';
 import { useUsers } from './hooks/useUsers';
 import { useGlobalParticipants } from './hooks/useGlobalParticipants';
-import { LogOut, Hash, Volume2, Plus, Mic, MicOff, PhoneOff, Settings, Monitor, MonitorOff, ShieldAlert, Edit2, Trash2, Download } from 'lucide-react';
+import { LogOut, Hash, Volume2, Plus, Mic, MicOff, PhoneOff, Settings, Monitor, MonitorOff, ShieldAlert, Edit2, Trash2, Download, X } from 'lucide-react';
 
 function AudioPlayer({ stream, volume, sinkId }) {
   const audioRef = useRef(null);
@@ -38,6 +38,7 @@ function App() {
   const [sessionAccess, setSessionAccess] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
   const { channels, createChannel, updateChannelName, removeChannel } = useChannels();
   const { users } = useUsers();
   const globalParticipants = useGlobalParticipants();
@@ -99,7 +100,58 @@ function App() {
     };
   }, []);
 
-  if (!currentUser) return <Login />;
+  if (!currentUser) {
+    return (
+      <>
+        {showDownloadModal && (
+          <div className="download-overlay" onClick={() => setShowDownloadModal(false)}>
+            <div className="download-modal" onClick={(e) => e.stopPropagation()}>
+              <button className="download-close" onClick={() => setShowDownloadModal(false)}>
+                <X size={18} />
+              </button>
+              <h3 className="download-title">Desktop App Downloads</h3>
+              {releaseDownloads.loading && (
+                <div className="download-muted">Checking latest release...</div>
+              )}
+              {releaseDownloads.error && (
+                <div className="download-muted">{releaseDownloads.error}</div>
+              )}
+              {releaseDownloads.version && (
+                <div className="download-version">Latest: {releaseDownloads.version}</div>
+              )}
+              <div className="download-actions">
+                <a
+                  className={`download-btn ${!releaseDownloads.mac ? 'disabled' : ''}`}
+                  href={releaseDownloads.mac?.url || releaseDownloads.releaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  macOS
+                </a>
+                <a
+                  className={`download-btn ${!releaseDownloads.windows ? 'disabled' : ''}`}
+                  href={releaseDownloads.windows?.url || releaseDownloads.releaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Windows
+                </a>
+              </div>
+              <a
+                className="download-release-link"
+                href={releaseDownloads.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                View all releases
+              </a>
+            </div>
+          </div>
+        )}
+        <Login onOpenDownloads={() => setShowDownloadModal(true)} />
+      </>
+    );
+  }
 
   const hasAccess = sessionAccess || localStorage.getItem(`cruwells_vox_access_${currentUser.uid}`) === 'true';
 
@@ -113,12 +165,65 @@ function App() {
   }
 
   const displayName = currentUser.displayName || 'Guest User';
+  const getAvatarName = (name) => (typeof name === 'string' && name.trim() ? name.trim() : 'User');
+  const getAvatarInitial = (name) => getAvatarName(name).charAt(0).toUpperCase();
+  const getAvatarColor = (name) => `hsl(${getAvatarName(name).charCodeAt(0) * 12 % 360}, 70%, 60%)`;
 
   return (
     <div className="app-container glass-panel">
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
       {showInviteModal && <InviteModal onClose={() => setShowInviteModal(false)} />}
       {showAdminModal && <AdminModal onClose={() => setShowAdminModal(false)} />}
+      {showDownloadModal && (
+        <div className="download-overlay" onClick={() => setShowDownloadModal(false)}>
+          <div className="download-modal" onClick={(e) => e.stopPropagation()}>
+            <button className="download-close" onClick={() => setShowDownloadModal(false)}>
+              <X size={18} />
+            </button>
+            <h3 className="download-title">Desktop App Downloads</h3>
+
+            {releaseDownloads.version && (
+              <div className="download-version">Latest: {releaseDownloads.version}</div>
+            )}
+
+            {releaseDownloads.loading ? (
+              <div className="download-muted">Checking latest release...</div>
+            ) : (
+              <div className="download-actions">
+                <a
+                  className={`download-btn ${!releaseDownloads.mac ? 'disabled' : ''}`}
+                  href={releaseDownloads.mac?.url || releaseDownloads.releaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  macOS
+                </a>
+                <a
+                  className={`download-btn ${!releaseDownloads.windows ? 'disabled' : ''}`}
+                  href={releaseDownloads.windows?.url || releaseDownloads.releaseUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Windows
+                </a>
+              </div>
+            )}
+
+            {releaseDownloads.error && (
+              <div className="download-muted">{releaseDownloads.error}</div>
+            )}
+
+            <a
+              className="download-release-link"
+              href={releaseDownloads.releaseUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              View all releases
+            </a>
+          </div>
+        </div>
+      )}
       {channelModalConfig?.isOpen && (
         <ChannelModal 
           onClose={() => setChannelModalConfig(null)}
@@ -145,6 +250,9 @@ function App() {
         <div className="separator"></div>
         <div className="server-icon add-server" title="Invite Friends" onClick={() => setShowInviteModal(true)}>
           <Plus size={24} />
+        </div>
+        <div className="server-icon download-server" title="Desktop Downloads" onClick={() => setShowDownloadModal(true)}>
+          <Download size={20} />
         </div>
       </nav>
 
@@ -246,63 +354,16 @@ function App() {
           </div>
         )}
 
-        <div className="desktop-download-panel">
-          <div className="desktop-download-header">
-            <Download size={14} />
-            <span>Desktop App</span>
-          </div>
-
-          {releaseDownloads.version && (
-            <div className="desktop-download-version">Latest: {releaseDownloads.version}</div>
-          )}
-
-          {releaseDownloads.loading ? (
-            <div className="desktop-download-muted">Checking latest release...</div>
-          ) : (
-            <div className="desktop-download-actions">
-              <a
-                className={`desktop-download-btn ${!releaseDownloads.mac ? 'disabled' : ''}`}
-                href={releaseDownloads.mac?.url || releaseDownloads.releaseUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                macOS
-              </a>
-              <a
-                className={`desktop-download-btn ${!releaseDownloads.windows ? 'disabled' : ''}`}
-                href={releaseDownloads.windows?.url || releaseDownloads.releaseUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Windows
-              </a>
-            </div>
-          )}
-
-          {releaseDownloads.error && (
-            <div className="desktop-download-muted">{releaseDownloads.error}</div>
-          )}
-
-          <a
-            className="desktop-release-link"
-            href={releaseDownloads.releaseUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            View all releases
-          </a>
-        </div>
-
         <div className="user-presence">
           <div className="avatar" style={{
-            background: `hsl(${displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+            background: getAvatarColor(displayName),
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontWeight: 'bold',
             color: 'white'
           }}>
-            {displayName.charAt(0).toUpperCase()}
+            {getAvatarInitial(displayName)}
           </div>
           <div className="user-info">
             <span className="username" style={{ color: currentUserProfile?.role === 'admin' ? 'var(--danger)' : 'var(--text-normal)' }}>
@@ -337,17 +398,17 @@ function App() {
           {users.map(u => (
             <div key={u.uid} className="member-item">
               <div className="avatar" style={{
-                background: `hsl(${u.displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+                background: getAvatarColor(u.displayName),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 fontWeight: 'bold',
                 color: 'white'
               }}>
-                {u.displayName.charAt(0).toUpperCase()}
+                {getAvatarInitial(u.displayName)}
               </div>
               <span className="member-name" style={{ color: u.role === 'admin' ? 'var(--danger)' : 'var(--text-normal)' }}>
-                {u.displayName}
+                {getAvatarName(u.displayName)}
               </span>
             </div>
           ))}
