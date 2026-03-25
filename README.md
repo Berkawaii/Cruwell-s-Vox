@@ -214,7 +214,5 @@ Add this repository secret for web deploy workflow:
 
 ## Contributing
 
-1. Create a feature branch
-2. Run lint and build locally
-3. Open pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for full contribution guidelines.
 
