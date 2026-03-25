@@ -265,6 +265,75 @@
   color: white;
 }
 
+.desktop-download-panel {
+  background-color: var(--surface-container-highest);
+  margin: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--outline_variant);
+}
+
+.desktop-download-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-normal);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.desktop-download-version {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.desktop-download-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.desktop-download-btn {
+  flex: 1;
+  background: var(--bg-modifier-active);
+  color: var(--text-normal);
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.desktop-download-btn:hover {
+  background: var(--primary);
+  color: var(--surface-container-lowest);
+}
+
+.desktop-download-btn.disabled {
+  opacity: 0.6;
+}
+
+.desktop-download-muted {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.desktop-release-link {
+  color: var(--primary);
+  font-size: 11px;
+  text-decoration: none;
+}
+
+.desktop-release-link:hover {
+  text-decoration: underline;
+}
+
 /* 3. Main Content */
 .main-content {
   flex: 1;

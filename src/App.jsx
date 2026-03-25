@@ -14,7 +14,7 @@ import ChannelModal from './components/ChannelModal';
 import { useChannels } from './hooks/useChannels';
 import { useUsers } from './hooks/useUsers';
 import { useGlobalParticipants } from './hooks/useGlobalParticipants';
-import { LogOut, Hash, Volume2, Plus, Mic, MicOff, PhoneOff, Settings, Monitor, MonitorOff, ShieldAlert, Edit2, Trash2 } from 'lucide-react';
+import { LogOut, Hash, Volume2, Plus, Mic, MicOff, PhoneOff, Settings, Monitor, MonitorOff, ShieldAlert, Edit2, Trash2, Download } from 'lucide-react';
 
 function AudioPlayer({ stream, volume, sinkId }) {
   const audioRef = useRef(null);
@@ -42,6 +42,62 @@ function App() {
   const { users } = useUsers();
   const globalParticipants = useGlobalParticipants();
   const [channelModalConfig, setChannelModalConfig] = useState(null);
+  const [releaseDownloads, setReleaseDownloads] = useState({
+    loading: true,
+    error: null,
+    releaseUrl: 'https://github.com/Berkawaii/Cruwell-s-Vox/releases',
+    version: null,
+    mac: null,
+    windows: null
+  });
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadReleaseDownloads() {
+      try {
+        const response = await fetch('https://api.github.com/repos/Berkawaii/Cruwell-s-Vox/releases/latest');
+        if (!response.ok) throw new Error(`GitHub API error: ${response.status}`);
+
+        const data = await response.json();
+        const assets = Array.isArray(data.assets) ? data.assets : [];
+
+        const macAsset = assets.find(asset => /\.dmg$/i.test(asset.name));
+        const windowsSetupAsset = assets.find(asset => /setup.*\.exe$/i.test(asset.name));
+        const windowsAnyExeAsset = assets.find(asset => /\.exe$/i.test(asset.name));
+
+        if (!mounted) return;
+
+        setReleaseDownloads({
+          loading: false,
+          error: null,
+          releaseUrl: data.html_url || 'https://github.com/Berkawaii/Cruwell-s-Vox/releases',
+          version: data.tag_name || null,
+          mac: macAsset
+            ? { name: macAsset.name, url: macAsset.browser_download_url }
+            : null,
+          windows: (windowsSetupAsset || windowsAnyExeAsset)
+            ? {
+                name: (windowsSetupAsset || windowsAnyExeAsset).name,
+                url: (windowsSetupAsset || windowsAnyExeAsset).browser_download_url
+              }
+            : null
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setReleaseDownloads(prev => ({
+          ...prev,
+          loading: false,
+          error: 'Desktop downloads are temporarily unavailable.'
+        }));
+      }
+    }
+
+    loadReleaseDownloads();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   if (!currentUser) return <Login />;
 
@@ -189,6 +245,53 @@ function App() {
             </div>
           </div>
         )}
+
+        <div className="desktop-download-panel">
+          <div className="desktop-download-header">
+            <Download size={14} />
+            <span>Desktop App</span>
+          </div>
+
+          {releaseDownloads.version && (
+            <div className="desktop-download-version">Latest: {releaseDownloads.version}</div>
+          )}
+
+          {releaseDownloads.loading ? (
+            <div className="desktop-download-muted">Checking latest release...</div>
+          ) : (
+            <div className="desktop-download-actions">
+              <a
+                className={`desktop-download-btn ${!releaseDownloads.mac ? 'disabled' : ''}`}
+                href={releaseDownloads.mac?.url || releaseDownloads.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                macOS
+              </a>
+              <a
+                className={`desktop-download-btn ${!releaseDownloads.windows ? 'disabled' : ''}`}
+                href={releaseDownloads.windows?.url || releaseDownloads.releaseUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Windows
+              </a>
+            </div>
+          )}
+
+          {releaseDownloads.error && (
+            <div className="desktop-download-muted">{releaseDownloads.error}</div>
+          )}
+
+          <a
+            className="desktop-release-link"
+            href={releaseDownloads.releaseUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            View all releases
+          </a>
+        </div>
 
         <div className="user-presence">
           <div className="avatar" style={{
