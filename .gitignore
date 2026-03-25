@@ -12,6 +12,10 @@ dist
 dist-electron
 release
 public/icon.iconset
+public/logo-16.png
+public/logo-32.png
+public/logo-64.png
+public/logo-128.png
 *.blockmap
 builder-debug.yml
 builder-effective-config.yaml

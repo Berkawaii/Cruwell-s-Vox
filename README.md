@@ -153,6 +153,31 @@ VITE_LIVEKIT_URL=
 
 ## Deployment
 
+### Production Infrastructure (Oracle Cloud)
+
+Voice SFU is hosted on Oracle Cloud and exposed over secure WebSocket.
+
+- Cloud: Oracle Cloud Infrastructure (OCI)
+- SFU host: LiveKit (Docker)
+- Reverse proxy: Caddy (TLS termination + WSS)
+- Public endpoint: `wss://130-61-146-31.nip.io`
+- Web app hosting: Firebase Hosting (`https://cruwellsvox.web.app`)
+
+```mermaid
+flowchart LR
+	U[Client Browser / Electron] -->|WSS 443| C[Caddy Reverse Proxy]
+	C -->|HTTP 7880| L[LiveKit SFU Container]
+	L -->|UDP 50000-50100| R[WebRTC Media]
+	U -->|HTTPS| F[Firebase Hosting]
+	U -->|Auth + Presence| DB[Firebase Auth + Firestore]
+```
+
+#### OCI Network Notes
+
+- Open TCP: `22`, `80`, `443`, `7880`
+- Open UDP: `50000-50100` (LiveKit RTC media)
+- Ensure iptables/NSG rules allow both inbound and return traffic for RTP/RTCP flows
+
 ### Firebase Hosting
 
 ```bash
@@ -193,6 +218,3 @@ Add this repository secret for web deploy workflow:
 2. Run lint and build locally
 3. Open pull request
 
-## License
-
-Proprietary 
