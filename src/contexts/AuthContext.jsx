@@ -58,7 +58,6 @@ export function AuthProvider({ children }) {
             uid: user.uid,
             email: user.email,
             displayName: user.displayName || 'Guest User',
-            photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'GU'}&background=random`,
             role: newRole,
             createdAt: new Date().toISOString()
           });

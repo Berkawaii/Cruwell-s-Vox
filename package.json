@@ -1,17 +1,32 @@
 {
   "name": "cruwellsvox",
+  "description": "Cruwells Vox - SFU-based real-time voice collaboration platform",
+  "author": "Cruwells Vox Team",
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "dist-electron/main.cjs",
+  "preload": "dist-electron/preload.cjs",
   "scripts": {
     "dev": "vite",
+    "dev:electron": "cross-env NODE_ENV=development concurrently \"vite\" \"wait-on http://localhost:5173 && npm run build:electron:dev && electron .\"",
     "build": "vite build",
+    "build:web": "vite build",
+    "build:electron:dev": "mkdir -p dist-electron && cp src/electron/* dist-electron/",
+    "build:electron:files": "mkdir -p dist-electron && cp src/electron/* dist-electron/",
+    "build:electron": "npm run build:web && npm run build:electron:files && electron-builder",
+    "build:electron:mac": "npm run build:web && npm run build:electron:files && electron-builder --mac",
+    "build:electron:win": "npm run build:web && npm run build:electron:files && electron-builder --win",
+    "build:electron:linux": "npm run build:web && npm run build:electron:files && electron-builder --linux",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron": "electron .",
+    "release:tag": "echo 'Use: git tag vX.Y.Z && git push origin vX.Y.Z'"
   },
   "dependencies": {
     "@jitsi/rnnoise-wasm": "^0.2.1",
     "firebase": "^12.11.0",
+    "livekit-client": "^2.18.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -23,10 +38,52 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
-    "vite": "^8.0.1"
+    "sharp": "^0.34.5",
+    "vite": "^8.0.1",
+    "wait-on": "^8.0.0"
+  },
+  "build": {
+    "appId": "com.cruwellsvox.app",
+    "productName": "CruwellsVox",
+    "directories": {
+      "buildResources": "public",
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities",
+      "icon": "public/icon.icns",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "public/logo.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
 }

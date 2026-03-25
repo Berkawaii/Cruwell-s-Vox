@@ -51,7 +51,6 @@ export function useMessages(roomId) {
       text,
       uid: user.uid,
       displayName: user.displayName || 'Guest User',
-      photoURL: user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'Guest'}&background=random`,
       createdAt: serverTimestamp()
     });
   };

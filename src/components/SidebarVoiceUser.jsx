@@ -7,11 +7,20 @@ export default function SidebarVoiceUser({ meta, stream }) {
   return (
     <div className="sidebar-voice-user">
       <div className="sidebar-voice-user-left">
-        <img 
-          src={meta?.photoURL} 
-          className={`avatar-small ${isSpeaking ? 'speaking' : ''}`} 
-          alt={meta?.displayName || 'User'} 
-        />
+        <div 
+          className={`avatar-small ${isSpeaking ? 'speaking' : ''}`}
+          style={{
+            background: `hsl(${meta?.displayName?.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            color: 'white',
+            fontSize: '12px'
+          }}
+        >
+          {meta?.displayName?.charAt(0).toUpperCase()}
+        </div>
         <span>{meta?.displayName}</span>
       </div>
       {meta?.isMuted && <MicOff size={14} className="muted-icon" style={{ color: 'var(--danger)', opacity: 0.8 }} />}

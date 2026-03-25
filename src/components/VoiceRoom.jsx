@@ -29,8 +29,7 @@ export default function VoiceRoom({ roomName }) {
               <div className={`remote-participant-wrapper ${isScreenSharing ? 'screen-sharing-wrapper' : ''}`}>
                 <VoiceParticipant 
                    meta={{ 
-                     displayName: currentUser.displayName || 'Guest', 
-                     photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=${currentUser.displayName || 'Guest'}&background=random`,
+                     displayName: currentUser.displayName || 'You', 
                      isScreenSharing
                    }} 
                    stream={localStream} 

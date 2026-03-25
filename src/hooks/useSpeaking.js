@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-export function useSpeaking(stream, threshold = 10) {
+export function useSpeaking(stream, threshold = 5) {
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
@@ -13,6 +13,7 @@ export function useSpeaking(stream, threshold = 10) {
     try {
       audioContext = new (window.AudioContext || window.webkitAudioContext)();
     } catch (e) {
+      console.warn('AudioContext not available:', e);
       return;
     }
 
@@ -37,7 +38,8 @@ export function useSpeaking(stream, threshold = 10) {
       }
       const average = sum / bufferLength;
 
-      setIsSpeaking(average > threshold);
+      const speaking = average > threshold;
+      setIsSpeaking(speaking);
       animationFrameId = requestAnimationFrame(checkSpeaking);
     };
 
@@ -46,7 +48,12 @@ export function useSpeaking(stream, threshold = 10) {
     return () => {
       cancelAnimationFrame(animationFrameId);
       source.disconnect();
-      audioContext.close();
+      analyser.disconnect();
+      try {
+        audioContext.close();
+      } catch (e) {
+        // Context might already be closed
+      }
     };
   }, [stream, threshold]);
 

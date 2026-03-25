@@ -35,7 +35,17 @@ export default function AdminModal({ onClose }) {
             <div className="admin-user-list">
               {users.map(user => (
                 <div key={user.id} className="admin-user-row">
-                  <img src={user.photoURL} alt="avatar" className="admin-user-avatar" />
+                  <div className="admin-user-avatar" style={{
+                    background: `hsl(${user.displayName?.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                    color: 'white',
+                    fontSize: '14px'
+                  }}>
+                    {user.displayName?.charAt(0).toUpperCase()}
+                  </div>
                   <div className="admin-user-info">
                     <span className="admin-user-name">
                       {user.displayName} {user.id === currentUser.uid && "(You)"}

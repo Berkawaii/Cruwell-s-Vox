@@ -49,11 +49,18 @@ export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
         </div>
       ) : (
         <>
-          <img
-            src={meta?.photoURL}
-            className={`voice-avatar ${isSpeaking ? 'speaking' : ''}`}
-            alt={meta?.displayName || 'User'}
-          />
+          {/* Colored avatar placeholder instead of loading images */}
+          <div className={`voice-avatar ${isSpeaking ? 'speaking' : ''}`} style={{
+            background: `hsl(${meta?.displayName?.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            fontWeight: 'bold',
+            color: 'white'
+          }}>
+            {meta?.displayName?.charAt(0).toUpperCase()}
+          </div>
           <div className="voice-name">{meta?.displayName} {isLocal && '(You)'}</div>
         </>
       )}

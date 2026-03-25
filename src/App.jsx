@@ -57,7 +57,6 @@ function App() {
   }
 
   const displayName = currentUser.displayName || 'Guest User';
-  const photoURL = currentUser.photoURL || `https://ui-avatars.com/api/?name=${displayName}&background=random`;
 
   return (
     <div className="app-container glass-panel">
@@ -192,7 +191,16 @@ function App() {
         )}
 
         <div className="user-presence">
-          <img src={photoURL} className="avatar" alt="Avatar" />
+          <div className="avatar" style={{
+            background: `hsl(${displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 'bold',
+            color: 'white'
+          }}>
+            {displayName.charAt(0).toUpperCase()}
+          </div>
           <div className="user-info">
             <span className="username" style={{ color: currentUserProfile?.role === 'admin' ? 'var(--danger)' : 'var(--text-normal)' }}>
               {displayName}
@@ -225,7 +233,16 @@ function App() {
           <h3 className="members-category">ONLINE — {users.length}</h3>
           {users.map(u => (
             <div key={u.uid} className="member-item">
-              <img src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}&background=random`} className="avatar" alt={u.displayName} />
+              <div className="avatar" style={{
+                background: `hsl(${u.displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold',
+                color: 'white'
+              }}>
+                {u.displayName.charAt(0).toUpperCase()}
+              </div>
               <span className="member-name" style={{ color: u.role === 'admin' ? 'var(--danger)' : 'var(--text-normal)' }}>
                 {u.displayName}
               </span>

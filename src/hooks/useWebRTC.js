@@ -33,8 +33,7 @@ export function useWebRTC(roomId, currentUser) {
       const myParticipantRef = doc(roomRef, 'participants', currentUser.uid);
       await setDoc(myParticipantRef, { 
         joinedAt: Date.now(),
-        displayName: currentUser.displayName || 'Guest User',
-        photoURL: currentUser.photoURL || `https://ui-avatars.com/api/?name=${currentUser.displayName || 'Guest'}&background=random`
+        displayName: currentUser.displayName || 'Guest User'
       });
 
       // Listen to participants changes to get their metadata

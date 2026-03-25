@@ -9,10 +9,18 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-electron
+release
+public/icon.iconset
+*.blockmap
+builder-debug.yml
+builder-effective-config.yaml
+.firebase/*.cache
 dist-ssr
 *.local
 .env
 .env.*
+.firebase/
 
 # Editor directories and files
 .vscode/*

@@ -53,7 +53,16 @@ export default function ChatArea({ roomId, roomName }) {
 
         {messages.map((msg) => (
           <div key={msg.id} className="message animate-fade-in">
-            <img src={msg.photoURL} className="avatar" alt={msg.displayName} />
+            <div className="avatar" style={{
+              background: `hsl(${msg.displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 'bold',
+              color: 'white'
+            }}>
+              {msg.displayName.charAt(0).toUpperCase()}
+            </div>
             <div className="message-content">
               <div className="message-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
