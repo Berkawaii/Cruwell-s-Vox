@@ -9,6 +9,9 @@ export default function ChatArea({ roomId, roomName }) {
   const { messages, loading, sendMessage, deleteMessage } = useMessages(roomId);
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
+  const getAvatarName = (name) => (typeof name === 'string' && name.trim() ? name.trim() : 'User');
+  const getAvatarInitial = (name) => getAvatarName(name).charAt(0).toUpperCase();
+  const getAvatarColor = (name) => `hsl(${getAvatarName(name).charCodeAt(0) * 12 % 360}, 70%, 60%)`;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -54,19 +57,19 @@ export default function ChatArea({ roomId, roomName }) {
         {messages.map((msg) => (
           <div key={msg.id} className="message animate-fade-in">
             <div className="avatar" style={{
-              background: `hsl(${msg.displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+              background: getAvatarColor(msg.displayName),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 'bold',
               color: 'white'
             }}>
-              {msg.displayName.charAt(0).toUpperCase()}
+              {getAvatarInitial(msg.displayName)}
             </div>
             <div className="message-content">
               <div className="message-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <span className="message-author">{msg.displayName}</span>
+                  <span className="message-author">{getAvatarName(msg.displayName)}</span>
                   <span className="message-timestamp">{formatTime(msg.createdAt)}</span>
                 </div>
                 {(msg.uid === currentUser.uid || currentUserProfile?.role === 'admin') && (

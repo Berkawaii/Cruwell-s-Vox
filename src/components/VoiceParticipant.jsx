@@ -7,6 +7,9 @@ export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
   const { screenStream } = useVoice();
   const isSpeaking = useSpeaking(stream, 10);
   const videoRef = useRef(null);
+  const displayName = typeof meta?.displayName === 'string' && meta.displayName.trim() ? meta.displayName.trim() : 'User';
+  const initial = displayName.charAt(0).toUpperCase();
+  const avatarColor = `hsl(${displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`;
 
   const showVideo = meta?.isScreenSharing;
 
@@ -51,7 +54,7 @@ export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
         <>
           {/* Colored avatar placeholder instead of loading images */}
           <div className={`voice-avatar ${isSpeaking ? 'speaking' : ''}`} style={{
-            background: `hsl(${meta?.displayName?.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+            background: avatarColor,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -59,9 +62,9 @@ export default function VoiceParticipant({ meta, stream, isLocal, micMuted }) {
             fontWeight: 'bold',
             color: 'white'
           }}>
-            {meta?.displayName?.charAt(0).toUpperCase()}
+            {initial}
           </div>
-          <div className="voice-name">{meta?.displayName} {isLocal && '(You)'}</div>
+          <div className="voice-name">{displayName} {isLocal && '(You)'}</div>
         </>
       )}
 

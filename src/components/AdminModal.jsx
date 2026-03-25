@@ -34,9 +34,14 @@ export default function AdminModal({ onClose }) {
           ) : (
             <div className="admin-user-list">
               {users.map(user => (
+                (() => {
+                  const displayName = typeof user.displayName === 'string' && user.displayName.trim() ? user.displayName.trim() : 'User';
+                  const initial = displayName.charAt(0).toUpperCase();
+                  const avatarColor = `hsl(${displayName.charCodeAt(0) * 12 % 360}, 70%, 60%)`;
+                  return (
                 <div key={user.id} className="admin-user-row">
                   <div className="admin-user-avatar" style={{
-                    background: `hsl(${user.displayName?.charCodeAt(0) * 12 % 360}, 70%, 60%)`,
+                    background: avatarColor,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -44,11 +49,11 @@ export default function AdminModal({ onClose }) {
                     color: 'white',
                     fontSize: '14px'
                   }}>
-                    {user.displayName?.charAt(0).toUpperCase()}
+                    {initial}
                   </div>
                   <div className="admin-user-info">
                     <span className="admin-user-name">
-                      {user.displayName} {user.id === currentUser.uid && "(You)"}
+                      {displayName} {user.id === currentUser.uid && "(You)"}
                     </span>
                     <span className={`admin-user-role role-${user.role}`}>
                       {user.role}
@@ -95,6 +100,8 @@ export default function AdminModal({ onClose }) {
                     )}
                   </div>
                 </div>
+                  );
+                })()
               ))}
             </div>
           )}
