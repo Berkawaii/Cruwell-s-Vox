@@ -36,13 +36,20 @@ const createWindow = () => {
     : hostedProdUrl;
 
   mainWindow.loadURL(startUrl);
+  mainWindow.show();
   
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
 
   mainWindow.webContents.on('did-fail-load', () => {
+    console.warn('Failed to load URL, retrying...', startUrl);
     setTimeout(() => mainWindow.loadURL(startUrl), 1000);
+  });
+
+  mainWindow.webContents.on('crashed', () => {
+    console.error('Renderer process crashed');
+    mainWindow.reload();
   });
 
   mainWindow.on('closed', () => {

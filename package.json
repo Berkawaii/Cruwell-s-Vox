@@ -18,6 +18,8 @@
     "build:electron:mac": "npm run build:web && npm run build:electron:files && electron-builder --mac --publish never",
     "build:electron:win": "npm run build:web && npm run build:electron:files && electron-builder --win --publish never",
     "build:electron:linux": "npm run build:web && npm run build:electron:files && electron-builder --linux --publish never",
+    "deploy": "npm run build:web && firebase deploy --only hosting,firestore:rules,functions",
+    "deploy:hosting": "npm run build:web && firebase deploy --only hosting",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron": "electron .",

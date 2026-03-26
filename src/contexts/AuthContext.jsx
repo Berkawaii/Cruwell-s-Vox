@@ -3,6 +3,7 @@ import { auth, googleProvider } from '../firebase';
 import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, collection, getCountFromServer } from 'firebase/firestore';
 import { db } from '../firebase';
+import LoadingScreen from '../components/LoadingScreen';
 
 const AuthContext = createContext();
 
@@ -98,13 +99,12 @@ export function AuthProvider({ children }) {
     currentUser,
     currentUserProfile,
     loginWithGoogle,
-
     logout
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? <LoadingScreen /> : children}
     </AuthContext.Provider>
   );
 }
