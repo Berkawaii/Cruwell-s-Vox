@@ -29,6 +29,16 @@ jobs:
         run: npm run build:electron:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_LIVEKIT_URL: ${{ secrets.VITE_LIVEKIT_URL }}
+          VITE_ALLOW_INSECURE_CLIENT_TOKEN: ${{ secrets.VITE_ALLOW_INSECURE_CLIENT_TOKEN }}
+          VITE_LIVEKIT_API_KEY: ${{ secrets.VITE_LIVEKIT_API_KEY }}
+          VITE_LIVEKIT_API_SECRET: ${{ secrets.VITE_LIVEKIT_API_SECRET }}
 
       - name: Upload macOS debug artifacts on failure
         if: failure()
@@ -68,6 +78,17 @@ jobs:
 
       - name: Build Windows artifacts
         run: npm run build:electron:win
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET: ${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_LIVEKIT_URL: ${{ secrets.VITE_LIVEKIT_URL }}
+          VITE_ALLOW_INSECURE_CLIENT_TOKEN: ${{ secrets.VITE_ALLOW_INSECURE_CLIENT_TOKEN }}
+          VITE_LIVEKIT_API_KEY: ${{ secrets.VITE_LIVEKIT_API_KEY }}
+          VITE_LIVEKIT_API_SECRET: ${{ secrets.VITE_LIVEKIT_API_SECRET }}
 
       - name: Upload Windows debug artifacts on failure
         if: failure()
